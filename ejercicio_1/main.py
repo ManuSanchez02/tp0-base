@@ -1,6 +1,7 @@
 from argparse import ArgumentParser
 import yaml
 
+
 def create_config(clients):
     config = {
         "version": "1.0",
@@ -16,6 +17,9 @@ def create_config(clients):
                     ],
                     "networks": [
                         "testing_net"
+                    ],
+                    "volumes": [
+                        "./server/config.ini:/config.ini"
                     ]
                 }
         },
@@ -30,7 +34,7 @@ def create_config(clients):
                     ]
                 }
             }
-        }
+        },
     }
 
     for i in range(clients):
@@ -46,6 +50,9 @@ def create_config(clients):
             "networks": [
                 "testing_net"
             ],
+            "volumes": [
+                "./client/config.yaml:/config.yaml"
+            ],
             "depends_on": [
                 "server"
             ]
@@ -57,8 +64,8 @@ def create_config(clients):
 
 def get_client_number():
     parser = ArgumentParser(
-                    prog='Docker compose config generator',
-                    description='Generate n clients')
+        prog='Docker compose config generator',
+        description='Generate n clients')
     parser.add_argument('client_number', type=int, help="Number of clients")
     args = parser.parse_args()
     return args.client_number
