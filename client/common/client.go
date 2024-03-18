@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"net"
 	"time"
+	"os"
+	"os/signal"
+	"syscall"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -21,6 +25,30 @@ type ClientConfig struct {
 type Client struct {
 	config ClientConfig
 	conn   net.Conn
+	done   chan bool
+	wg	   sync.WaitGroup
+}
+
+func (c *Client) sigterm_handler(sigterms chan os.Signal) {
+	<-sigterms
+	log.Infof("action: graceful_shutdown | result: in_progress | client_id: %v",
+		c.config.ID,
+	)
+	log.Infof("action: wait_for_connections | result: in_progress | client_id: %v",
+		c.config.ID,
+	)
+	c.wg.Wait()
+	c.done <- true
+	log.Infof("action: wait_for_connections | result: success | client_id: %v",
+		c.config.ID,
+	)
+	log.Infof("action: close_socket | result: in_progress | client_id: %v",
+		c.config.ID,
+	)
+	c.conn.Close()
+	log.Infof("action: close_socket | result: success | client_id: %v",
+		c.config.ID,
+	)
 }
 
 // NewClient Initializes a new client receiving the configuration
@@ -28,7 +56,14 @@ type Client struct {
 func NewClient(config ClientConfig) *Client {
 	client := &Client{
 		config: config,
+		done: make(chan bool, 1),
 	}
+
+	sigterms := make(chan os.Signal, 1)
+	signal.Notify(sigterms, syscall.SIGTERM)
+
+	go client.sigterm_handler(sigterms)
+
 	return client
 }
 
@@ -36,6 +71,7 @@ func NewClient(config ClientConfig) *Client {
 // failure, error is printed in stdout/stderr and exit 1
 // is returned
 func (c *Client) createClientSocket() error {
+	c.wg.Add(1)
 	conn, err := net.Dial("tcp", c.config.ServerAddress)
 	if err != nil {
 		log.Fatalf(
@@ -62,6 +98,11 @@ loop:
                 c.config.ID,
             )
 			break loop
+		case <-c.done:
+			log.Infof("action: graceful_shutdown | result: success | client_id: %v",
+                c.config.ID,
+            )
+			break loop
 		default:
 		}
 
@@ -78,6 +119,7 @@ loop:
 		msg, err := bufio.NewReader(c.conn).ReadString('\n')
 		msgID++
 		c.conn.Close()
+		c.wg.Done()
 
 		if err != nil {
 			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
