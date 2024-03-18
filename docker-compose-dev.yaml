@@ -41,15 +41,6 @@ services:
     volumes:
       - ./client/config.yaml:/config.yaml
 
-  netcat:
-    container_name: test
-    image: test:latest
-    entrypoint: /ejercicio_3.sh
-    networks:
-      - testing_net
-    depends_on:
-      - server
-
 
 networks:
   testing_net:
