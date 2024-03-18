@@ -27,6 +27,7 @@ class Server:
             try:
                 client_sock = self.__accept_new_connection()
             except OSError:
+                logging.info("action: graceful_shutdown | result: success")
                 return
             
             self.__handle_client_connection(client_sock)
@@ -69,6 +70,5 @@ class Server:
         logging.info("action: close_socket | result: in_progress")
         self._server_socket.close()
         logging.info("action: close_socket | result: success")
-        logging.info("action: graceful_shutdown | result: success")
 
 
