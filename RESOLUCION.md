@@ -1,6 +1,8 @@
 # TP0: Docker + Comunicaciones + Concurrencia
 
-## Ejercicio 1
+## Parte 1
+
+### Ejercicio 1
 Para ejecutar el ejercicio 1, simplemente se debe ejecutar el comando
 
 ```bash
@@ -13,7 +15,7 @@ Esto ejecutara el docker-compose y creara los contenedores respectivos. Para ver
 make docker-compose-logs
 ```
 
-### Ejercicio 1.1
+#### Ejercicio 1.1
 En el directorio `ejercicio_1` hay un script de Python llamado `main.py`. Este script genera un archivo `docker-compose-ej-1.yaml`. Para correrlo, se usa de la siguiente manera:
 
 ```bash
@@ -30,7 +32,7 @@ make docker-compose-logs-ej-1
 De esta forma, se levantan los contenedores indicados en el archivo de configuracion `docker-compose-ej-1.yaml`. Para detener estos contenedores, se puede usar el comando `make docker-compose-down-ej-1`.
 
 
-## Ejercicio 2
+### Ejercicio 2
 Para verificar el correcto funcionamiento del ejercicio 2, basta con ejecutar alguno de los archivos de configuracion `docker-compose.yaml` para levantar los contenedores. Verificar el correcto funcionamiento de los mismos mediante los logs o `docker ps -a` (verificando que el codigo de salida sea 0).
 
 Luego, es posible modificar los archivos de configuracion `client/config.yaml` o `server/config.ini`. Por ejemplo, si el servidor sigue corriendo con la configuracion inicial, y se vuelve a ejecutar algun contenedor de cliente pero habiendo cambiado la configuracion en `client/config.yaml` por:
@@ -62,9 +64,15 @@ docker start <ID_CONTENEDOR>
 Luego, solo resta verificar los logs o el codigo de salida (mediante `docker ps -a`) del cliente para ver si los cambios surtieron efecto.
 
 
-## Ejercicio 3
+### Ejercicio 3
 En la carpeta de `ejercicio_3` se encuentra todo lo necesario para verificar si el servidor esta ejecutandose. El primer paso es ejecutar el script `build_image.sh`, el cual construye la imagen que se usara para realizar la verificacion. 
 
 Una vez ejecutado dicho script, tan solo resta ejecutar `run_container.sh`. Este script levanta el contenedor, el cual, usando netcat, envia el mensaje `"ping"` al servidor. 
 
 El servidor, al ser un EchoServer, responde con el mismo mensaje. Si la respuesta recibida es igual a `"ping"`, entonces la verificacion ha tenido exito. En caso contrario, se imprimira un mensaje indicando que hubo un error.
+
+
+### Ejercicio 4
+Para verificar que el *graceful shutdown* funcione bien, hace falta levantar los contenedores usando `make docker-compose-up`. Una vez que se esten ejecutando, es posible verificar los logs con el comando `make docker-compose-logs`.
+
+En otra terminal, hay que ejecutar `make docker-compose-down` para enviar la señal `SIGTERM`. Al recibirla, cada contenedor hara un graceful shutdown, el cual se ve detallado en los logs.
