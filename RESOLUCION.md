@@ -30,7 +30,7 @@ make docker-compose-logs-ej-1
 De esta forma, se levantan los contenedores indicados en el archivo de configuracion `docker-compose-ej-1.yaml`. Para detener estos contenedores, se puede usar el comando `make docker-compose-down-ej-1`.
 
 
-### Ejercicio 2
+## Ejercicio 2
 Para verificar el correcto funcionamiento del ejercicio 2, basta con ejecutar alguno de los archivos de configuracion `docker-compose.yaml` para levantar los contenedores. Verificar el correcto funcionamiento de los mismos mediante los logs o `docker ps -a` (verificando que el codigo de salida sea 0).
 
 Luego, es posible modificar los archivos de configuracion `client/config.yaml` o `server/config.ini`. Por ejemplo, si el servidor sigue corriendo con la configuracion inicial, y se vuelve a ejecutar algun contenedor de cliente pero habiendo cambiado la configuracion en `client/config.yaml` por:
@@ -60,3 +60,11 @@ docker start <ID_CONTENEDOR>
 ```
 
 Luego, solo resta verificar los logs o el codigo de salida (mediante `docker ps -a`) del cliente para ver si los cambios surtieron efecto.
+
+
+## Ejercicio 3
+En la carpeta de `ejercicio_3` se encuentra todo lo necesario para verificar si el servidor esta ejecutandose. El primer paso es ejecutar el script `build_image.sh`, el cual construye la imagen que se usara para realizar la verificacion. 
+
+Una vez ejecutado dicho script, tan solo resta ejecutar `run_container.sh`. Este script levanta el contenedor, el cual, usando netcat, envia el mensaje `"ping"` al servidor. 
+
+El servidor, al ser un EchoServer, responde con el mismo mensaje. Si la respuesta recibida es igual a `"ping"`, entonces la verificacion ha tenido exito. En caso contrario, se imprimira un mensaje indicando que hubo un error.
