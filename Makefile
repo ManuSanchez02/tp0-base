@@ -37,3 +37,16 @@ docker-compose-down:
 docker-compose-logs:
 	docker compose -f docker-compose-dev.yaml logs -f
 .PHONY: docker-compose-logs
+
+docker-compose-up-ej-1: docker-image
+	docker compose -f docker-compose-ej-1.yaml up -d --build
+.PHONY: docker-compose-up
+
+docker-compose-logs-ej-1:
+	docker compose -f docker-compose-ej-1.yaml logs -f
+.PHONY: docker-compose-logs
+
+docker-compose-down-ej-1:
+	docker compose -f docker-compose-ej-1.yaml stop -t 1
+	docker compose -f docker-compose-ej-1.yaml down
+.PHONY: docker-compose-down
