@@ -68,3 +68,9 @@ En la carpeta de `ejercicio_3` se encuentra todo lo necesario para verificar si 
 Una vez ejecutado dicho script, tan solo resta ejecutar `run_container.sh`. Este script levanta el contenedor, el cual, usando netcat, envia el mensaje `"ping"` al servidor. 
 
 El servidor, al ser un EchoServer, responde con el mismo mensaje. Si la respuesta recibida es igual a `"ping"`, entonces la verificacion ha tenido exito. En caso contrario, se imprimira un mensaje indicando que hubo un error.
+
+
+## Ejercicio 4
+Para verificar que el *graceful shutdown* funcione bien, hace falta levantar los contenedores usando `make docker-compose-up`. Una vez que se esten ejecutando, es posible verificar los logs con el comando `make docker-compose-logs`.
+
+En otra terminal, hay que ejecutar `make docker-compose-down` para enviar la señal `SIGTERM`. Al recibirla, cada contenedor hara un graceful shutdown, el cual se ve detallado en los logs.

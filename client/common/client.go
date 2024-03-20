@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net"
 	"time"
+	"os"
+	"os/signal"
+	"syscall"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -21,6 +24,24 @@ type ClientConfig struct {
 type Client struct {
 	config ClientConfig
 	conn   net.Conn
+	done   chan bool
+}
+
+func (c *Client) sigterm_handler(sigterms chan os.Signal) {
+	<-sigterms
+	log.Infof("action: graceful_shutdown | result: in_progress | client_id: %v",
+		c.config.ID,
+	)
+
+	c.done <- true
+
+	log.Infof("action: close_socket | result: in_progress | client_id: %v",
+		c.config.ID,
+	)
+	c.conn.Close()
+	log.Infof("action: close_socket | result: success | client_id: %v",
+		c.config.ID,
+	)
 }
 
 // NewClient Initializes a new client receiving the configuration
@@ -28,7 +49,13 @@ type Client struct {
 func NewClient(config ClientConfig) *Client {
 	client := &Client{
 		config: config,
+		done: make(chan bool, 1),
 	}
+
+	sigterms := make(chan os.Signal, 1)
+	signal.Notify(sigterms, syscall.SIGTERM)
+	go client.sigterm_handler(sigterms)
+
 	return client
 }
 
@@ -62,6 +89,11 @@ loop:
                 c.config.ID,
             )
 			break loop
+		case <-c.done:
+			log.Infof("action: graceful_shutdown | result: success | client_id: %v",
+                c.config.ID,
+            )
+			break loop
 		default:
 		}
 
@@ -92,7 +124,14 @@ loop:
         )
 
 		// Wait a time between sending one message and the next one
-		time.Sleep(c.config.LoopPeriod)
+		select {
+		case <-c.done:
+			log.Infof("action: graceful_shutdown | result: success | client_id: %v",
+				c.config.ID,
+			)
+			break loop
+		case <- time.After(c.config.LoopPeriod):
+		}
 	}
 
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
