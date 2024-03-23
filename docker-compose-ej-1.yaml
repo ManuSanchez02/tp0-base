@@ -19,6 +19,11 @@ services:
     environment:
     - CLI_ID=1
     - CLI_LOG_LEVEL=DEBUG
+    - CLI_NOMBRE=nombre-1
+    - CLI_APELLIDO=apellido-1
+    - CLI_DOCUMENTO=40000001
+    - CLI_NACIMIENTO=2000-01-02
+    - CLI_NUMERO=10001
     networks:
     - testing_net
     volumes:
@@ -32,6 +37,11 @@ services:
     environment:
     - CLI_ID=2
     - CLI_LOG_LEVEL=DEBUG
+    - CLI_NOMBRE=nombre-2
+    - CLI_APELLIDO=apellido-2
+    - CLI_DOCUMENTO=40000002
+    - CLI_NACIMIENTO=2000-01-03
+    - CLI_NUMERO=10002
     networks:
     - testing_net
     volumes:
@@ -45,6 +55,11 @@ services:
     environment:
     - CLI_ID=3
     - CLI_LOG_LEVEL=DEBUG
+    - CLI_NOMBRE=nombre-3
+    - CLI_APELLIDO=apellido-3
+    - CLI_DOCUMENTO=40000003
+    - CLI_NACIMIENTO=2000-01-04
+    - CLI_NUMERO=10003
     networks:
     - testing_net
     volumes:

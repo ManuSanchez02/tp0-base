@@ -76,3 +76,22 @@ El servidor, al ser un EchoServer, responde con el mismo mensaje. Si la respuest
 Para verificar que el *graceful shutdown* funcione bien, hace falta levantar los contenedores usando `make docker-compose-up`. Una vez que se esten ejecutando, es posible verificar los logs con el comando `make docker-compose-logs`.
 
 En otra terminal, hay que ejecutar `make docker-compose-down` para enviar la señal `SIGTERM`. Al recibirla, cada contenedor hara un graceful shutdown, el cual se ve detallado en los logs.
+
+
+## Parte 2
+
+### Ejercicio 5
+
+Los paquetes del protocolo que implemente se ven asi:
+| Longitud | Documento | ; | Nacimiento | ; | Numero | ; | Nombre | ; | Apellido |
+|----------|-----------|---|------------|---|--------|---|--------|---|----------|
+
+El campo de **Longitud** es un numero entero sin signo de 8 bits que indica la longitud total del paquete en bytes (desde el campo **Documento** hasta el campo **Apellido**). Es decir, para recibir un paquete, es necesario leer el primer byte para saber su longitud. Usando esta informacion, se lee mas bytes del socket hasta alcanzar la longitud indicada.
+
+El resto de campos vienen como texto, siendo estos de tamaño variable. Por lo tanto, los campos estan delimitados usando el caracter **";"**. Una vez leidos todos los bytes de la "apuesta", se transforma en `string` y se separa acorde al delimitador mencionado previamente. Una vez que el servidor recibe la apuesta, envia `"OK"` al cliente para confirmar la recepcion.
+
+Para ejecutar el programa, simplemente hay que correr `make docker-compose-up` para levantar los contenedores y `make docker-compose-log` para ver los logs que indican el envio y recibo de los paquetes. 
+
+![Diagrama de protocolo](./images/protocol_example.png)
+
+Un detalle importante de aclarar es que el protocolo solo contempla el envio de caracteres ASCII. Es decir, cada caracter enviado por paquete ocupa 1 solo byte. Por lo tanto, la longitud maxima de un paquete es 255 bytes, lo que resulta en 255 caracteres ASCII (incluyendo los **";"**).

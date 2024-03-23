@@ -2,15 +2,19 @@ package common
 
 import (
 	"bufio"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"net"
-	"time"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
+
+const CONFIRMATION = "OK"
 
 // ClientConfig Configuration used by the client
 type ClientConfig struct {
@@ -49,7 +53,7 @@ func (c *Client) sigterm_handler(sigterms chan os.Signal) {
 func NewClient(config ClientConfig) *Client {
 	client := &Client{
 		config: config,
-		done: make(chan bool, 1),
+		done:   make(chan bool, 1),
 	}
 
 	sigterms := make(chan os.Signal, 1)
@@ -66,7 +70,7 @@ func (c *Client) createClientSocket() error {
 	conn, err := net.Dial("tcp", c.config.ServerAddress)
 	if err != nil {
 		log.Fatalf(
-	        "action: connect | result: fail | client_id: %v | error: %v",
+			"action: connect | result: fail | client_id: %v | error: %v",
 			c.config.ID,
 			err,
 		)
@@ -85,14 +89,14 @@ loop:
 	for timeout := time.After(c.config.LoopLapse); ; {
 		select {
 		case <-timeout:
-	        log.Infof("action: timeout_detected | result: success | client_id: %v",
-                c.config.ID,
-            )
+			log.Infof("action: timeout_detected | result: success | client_id: %v",
+				c.config.ID,
+			)
 			break loop
 		case <-c.done:
 			log.Infof("action: graceful_shutdown | result: success | client_id: %v",
-                c.config.ID,
-            )
+				c.config.ID,
+			)
 			break loop
 		default:
 		}
@@ -113,15 +117,15 @@ loop:
 
 		if err != nil {
 			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
-                c.config.ID,
+				c.config.ID,
 				err,
 			)
 			return
 		}
 		log.Infof("action: receive_message | result: success | client_id: %v | msg: %v",
-            c.config.ID,
-            msg,
-        )
+			c.config.ID,
+			msg,
+		)
 
 		// Wait a time between sending one message and the next one
 		select {
@@ -130,9 +134,84 @@ loop:
 				c.config.ID,
 			)
 			break loop
-		case <- time.After(c.config.LoopPeriod):
+		case <-time.After(c.config.LoopPeriod):
 		}
 	}
 
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+}
+
+func (c *Client) ProcessBet(bet Bet) {
+	c.createClientSocket()
+	defer c.conn.Close()
+
+	msg, send_err := c.sendBet(bet)
+	if send_err != nil {
+		log.Errorf("action: send_bet | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			send_err,
+		)
+		return
+	}
+
+	log.Infof("action: send_bet | result: success | client_id: %v | msg: %v",
+		c.config.ID,
+		msg,
+	)
+
+	if receive_err := c.receiveConfirmation(); receive_err != nil {
+		log.Errorf("action: receive_confirmation | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			receive_err,
+		)
+		return
+	}
+
+	log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
+		bet.Document,
+		bet.Number,
+	)
+}
+
+func (c *Client) sendBet(bet Bet) (string, error) {
+	msg := bet.Serialize()
+	if len(msg) > 255 {
+		return "", errors.New("message too long")
+	}
+	length := uint8(len(msg))
+	length_bytes := make([]byte, binary.Size(length))
+	length_bytes[0] = length
+	total_bytes_written := 0
+	for bytes_written, err := c.conn.Write(length_bytes); total_bytes_written < len(length_bytes); {
+		if err != nil {
+			return "", err
+		}
+		total_bytes_written += bytes_written
+	}
+
+	total_bytes_written = 0
+	for bytes_written, err := fmt.Fprintf(c.conn, "%v", msg); total_bytes_written < len(msg); {
+		if err != nil {
+			return "", err
+		}
+		total_bytes_written += bytes_written
+	}
+
+	return msg, nil
+}
+
+func (c *Client) receiveConfirmation() error {
+	response := make([]byte, len(CONFIRMATION))
+	total_bytes_read := 0
+	for bytes_read, err := c.conn.Read(response); total_bytes_read < len(CONFIRMATION); {
+		if err != nil {
+			return err
+		} else if string(response) != CONFIRMATION {
+			return errors.New("unexpected response")
+		}
+
+		total_bytes_read += bytes_read
+	}
+
+	return nil
 }

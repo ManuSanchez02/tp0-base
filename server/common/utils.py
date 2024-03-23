@@ -8,6 +8,7 @@ STORAGE_FILEPATH = "./bets.csv"
 """ Simulated winner number in the lottery contest. """
 LOTTERY_WINNER_NUMBER = 7574
 
+DELIMITER = ';'
 
 """ A lottery bet registry. """
 class Bet:
@@ -23,6 +24,15 @@ class Bet:
         self.document = document
         self.birthdate = datetime.date.fromisoformat(birthdate)
         self.number = int(number)
+
+    @staticmethod
+    def from_str(s: str) -> 'Bet':
+        args = s.split(DELIMITER)
+        if len(args) != 6:
+            raise ValueError(f'Invalid Bet string format. Expected 6 fields separated by "{DELIMITER}".')
+        
+        return Bet(*args)
+    
 
 """ Checks whether a bet won the prize or not. """
 def has_won(bet: Bet) -> bool:
