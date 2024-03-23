@@ -45,7 +45,12 @@ def create_config(clients):
             "entrypoint": "/client",
             "environment": [
                 f"CLI_ID={client_id}",
-                "CLI_LOG_LEVEL=DEBUG"
+                "CLI_LOG_LEVEL=DEBUG",
+                f"CLI_NOMBRE=nombre-{client_id}",
+                f"CLI_APELLIDO=apellido-{client_id}",
+                f"CLI_DOCUMENTO={40000000+client_id}",
+                f"CLI_NACIMIENTO=2000-01-0{client_id % 9 + 1}",
+                f"CLI_NUMERO={10000+client_id}",
             ],
             "networks": [
                 "testing_net"

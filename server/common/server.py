@@ -2,6 +2,9 @@ import signal
 import socket
 import logging
 
+from common.utils import Bet, store_bets
+
+CONFIRMATION = b'OK'
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -33,6 +36,19 @@ class Server:
             
             self.__handle_client_connection(client_sock)
 
+    def __read_msg(self, client_sock: socket.socket) -> str:
+        packet_len = int.from_bytes(receive_exact(client_sock, 1), 'big', signed=False)
+        msg = receive_exact(client_sock, packet_len).decode('utf-8')        
+        addr = client_sock.getpeername()
+        logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
+
+        return msg
+    
+    def __send_confirmation(self, client_sock: socket.socket):
+        send(client_sock, CONFIRMATION)
+        addr = client_sock.getpeername()
+        logging.info(f'action: send_confirmation | result: success | ip: {addr[0]}')
+
     def __handle_client_connection(self, client_sock: socket.socket):
         """
         Read message from a specific client socket and closes the socket
@@ -42,13 +58,16 @@ class Server:
         """
         try:
             # TODO: Modify the receive to avoid short-reads
-            msg = client_sock.recv(1024).rstrip().decode('utf-8')
-            addr = client_sock.getpeername()
-            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
-            # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(msg).encode('utf-8'))
+            msg = self.__read_msg(client_sock)
+            bet = Bet.from_str(msg)
+            store_bets([bet])
+            logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
+            self.__send_confirmation(client_sock)
+
         except OSError as e:
-            logging.error("action: receive_message | result: fail | error: {e}")
+            logging.error(f"action: receive_message | result: fail | error: {e}")
+        except ValueError as e:
+            logging.error(f"action: apuesta_almacenada | result: fail | error: {e}")
         finally:
             client_sock.close()
             self._client_sockets.discard(client_sock)
@@ -78,5 +97,13 @@ class Server:
             client_sock.close()
         logging.info("action: close_client_sockets | result: success")
         
+def send(client_sock: socket.socket, message: bytes):
+    sent_data = client_sock.send(message)
+    while sent_data < len(message):
+        sent_data += client_sock.send(message[sent_data:])
 
-
+def receive_exact(client_sock: socket.socket, length: int) -> bytes:
+    data = client_sock.recv(length)
+    while len(data) < length:
+        data += client_sock.recv(length - len(data))
+    return data
