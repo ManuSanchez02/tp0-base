@@ -35,39 +35,60 @@ class Server:
                 return
             
             self.__handle_client_connection(client_sock)
-
-    def __read_msg(self, client_sock: socket.socket) -> str:
-        packet_len = int.from_bytes(receive_exact(client_sock, 1), 'big', signed=False)
-        msg = receive_exact(client_sock, packet_len).decode('utf-8')        
+        
+        
+    def __read_msg(self, client_sock: socket.socket) -> bytes:
+        batch_len_bytes = receive_exact(client_sock, 4)       
+        batch_len = int.from_bytes(batch_len_bytes, 'big', signed=False)
         addr = client_sock.getpeername()
-        logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
 
-        return msg
+        logging.info(f'action: receive_batch | result: in_progress | ip: {addr[0]} | batch_len: {batch_len}')
+        batch = receive_exact(client_sock, batch_len)          
+        logging.info(f'action: receive_batch | result: success | ip: {addr[0]}')
+
+        return batch
     
     def __send_confirmation(self, client_sock: socket.socket):
         send(client_sock, CONFIRMATION)
         addr = client_sock.getpeername()
         logging.info(f'action: send_confirmation | result: success | ip: {addr[0]}')
 
+    def __get_client_id(self, client_sock: socket.socket) -> str:
+        id = ""
+        while read := client_sock.recv(1):
+            if read == b'\n':
+                return id
+            id += read.decode('utf-8')
+
     def __handle_client_connection(self, client_sock: socket.socket):
         """
-        Read message from a specific client socket and closes the socket
+        Read batches from client socket and process them. If an empty
+        message is received, the client socket will be closed.
 
         If a problem arises in the communication with the client, the
         client socket will also be closed
         """
         try:
-            # TODO: Modify the receive to avoid short-reads
-            msg = self.__read_msg(client_sock)
-            bet = Bet.from_str(msg)
-            store_bets([bet])
-            logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
-            self.__send_confirmation(client_sock)
+            client_id = self.__get_client_id(client_sock)
+            bets_processed = 0
 
+            while True:
+                msg_bytes = self.__read_msg(client_sock)
+                if not msg_bytes:
+                    logging.info("action: client_disconnected | result: success")
+                    break
+
+                bets = process_batch(msg_bytes, client_id)
+                store_bets(bets)
+                bets_processed += len(bets)
+                logging.info(f'action: apuestas_almacenadas | result: success | apuestas: {bets}')
+                self.__send_confirmation(client_sock)
         except OSError as e:
             logging.error(f"action: receive_message | result: fail | error: {e}")
         except ValueError as e:
-            logging.error(f"action: apuesta_almacenada | result: fail | error: {e}")
+            logging.error(f"action: apuestas_almacenadas | result: fail | error: {e}")
+        except EOFError:
+            logging.info(f"action: client_disconnected | result: success | bets_processed: {bets_processed}")
         finally:
             client_sock.close()
             self._client_sockets.discard(client_sock)
@@ -105,5 +126,19 @@ def send(client_sock: socket.socket, message: bytes):
 def receive_exact(client_sock: socket.socket, length: int) -> bytes:
     data = client_sock.recv(length)
     while len(data) < length:
-        data += client_sock.recv(length - len(data))
+        read_data = client_sock.recv(length - len(data))
+        if not read_data:
+            raise EOFError("EOF reached while reading data")
+        data += read_data
     return data
+
+def process_batch(batch: bytes, agency_id: str):
+    bets = []
+    i = 0
+    while i < len(batch): 
+        packet_len = batch[i]
+        bet_info = f"{agency_id};{batch[i+1:i+packet_len+1].decode('utf-8')}"
+        current_bet = Bet.from_str(bet_info)
+        bets.append(current_bet)
+        i += packet_len + 1
+    return bets

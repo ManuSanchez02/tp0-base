@@ -20,17 +20,14 @@ services:
     environment:
       - CLI_ID=1
       - CLI_LOG_LEVEL=DEBUG
-      - CLI_NOMBRE=Santiago Lionel
-      - CLI_APELLIDO=Lorca
-      - CLI_DOCUMENTO=30904465
-      - CLI_NACIMIENTO=1999-03-17
-      - CLI_NUMERO=7574
+      - CLI_SOURCE=agency-1.csv
     networks:
       - testing_net
     depends_on:
       - server
     volumes:
       - ./client/config.yaml:/config.yaml
+      - ./.data:/.data
 
   client2:
     container_name: client2
@@ -39,17 +36,14 @@ services:
     environment:
       - CLI_ID=2
       - CLI_LOG_LEVEL=DEBUG
-      - CLI_NOMBRE=Lautaro
-      - CLI_APELLIDO=Perez
-      - CLI_DOCUMENTO=31204465
-      - CLI_NACIMIENTO=2000-03-17
-      - CLI_NUMERO=10002
+      - CLI_SOURCE=agency-2.csv
     networks:
       - testing_net
     depends_on:
       - server
     volumes:
       - ./client/config.yaml:/config.yaml
+      - ./.data:/.data
 
 
 networks:

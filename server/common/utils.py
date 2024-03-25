@@ -33,6 +33,9 @@ class Bet:
         
         return Bet(*args)
     
+    def __repr__(self) -> str:
+        return f'(dni: {self.document} | numero: {self.number})'
+    
 
 """ Checks whether a bet won the prize or not. """
 def has_won(bet: Bet) -> bool:

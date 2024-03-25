@@ -82,7 +82,7 @@ En otra terminal, hay que ejecutar `make docker-compose-down` para enviar la se�
 
 ### Ejercicio 5
 
-Los paquetes del protocolo que implemente se ven asi:
+Los paquetes del protocolo que implementé se ven asi:
 | Longitud | ID Agencia | ; | Nombre | ; | Apellido | ; | Documento | ; | Nacimiento | ; | Numero | 
 |----------|------------|---|--------|---|----------|---|-----------|---|------------|---|--------|
 
@@ -95,3 +95,18 @@ Para ejecutar el programa, simplemente hay que correr `make docker-compose-up` p
 ![Diagrama de protocolo](./images/ejercicio_5_envio_de_apuesta.png)
 
 Un detalle importante es que el tamaño maximo que puede tener un paquete es 255 bytes de longitud para la parte de campos variables, mas un byte que denota la longitud misma. Esto resulta en un tamaño maximo de 256 bytes.
+
+### Ejercicio 6
+
+Decidi modificar el protocolo para este ejercicio. La comunicacion inicia del lado del cliente, quien envia el ID de la agencia. Despues de enviar dicho ID, el cliente envia, de a batches, las apuestas al servidor. El formato de estos batches es el siguiente:
+
+| Longitud del batch | Longitud apuesta 1 | Apuesta 1 | Longitud apuesta 2 | Apuesta 2 | ... |
+|--------------------|--------------------|-----------|--------------------|-----------|-----|
+
+La longitud del batch indica la longitud (en bytes) del batch. Esta expresada en un enterno sin signo de 32 bits, por lo que el servidor primero lee dicho numero para saber cuantos bytes debe leer y obtener todo el batch.
+
+![Diagrama de protocolo por batches](./images/ejercicio_6_envio_de_batches.png)
+
+El tamaño del batch es de 32 apuestas por defecto, aunque puede ser modificado desde el archivo de config.yaml. El valor por defecto lo calcule usando el tamaño maximo teorico de una apuesta, que debido al protocolo implementado es de 256 bytes (255 bytes para datos y 1 byte para la longitud). Debido a que el requisito es que no se superen los 8kB por batch, entonces simplemente divido los 8kB por la longitud maxima de una apuesta (256 bytes), lo que da por resultado 32 apuestas por batch.
+
+Para ejecutar este ejercicio, solo hace falta correr `make docker-compose-up` y ver los logs con `make docker-compose-log`. Es recomendable redirigir el output a un archivo de texto para poder leer los logs con mayor facilidad ya que suelen ser muy extensos. Para ello, se puede ejecutar el comando `make docker-compose-log > logs.txt`
