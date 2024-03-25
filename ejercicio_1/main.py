@@ -13,7 +13,7 @@ def create_config(clients):
                     "entrypoint": "python3 /main.py",
                     "environment": [
                         "PYTHONUNBUFFERED=1",
-                        "LOGGING_LEVEL=DEBUG"
+                        "LOGGING_LEVEL=INFO"
                     ],
                     "networks": [
                         "testing_net"
@@ -45,7 +45,7 @@ def create_config(clients):
             "entrypoint": "/client",
             "environment": [
                 f"CLI_ID={client_id}",
-                "CLI_LOG_LEVEL=DEBUG",
+                "CLI_LOG_LEVEL=INFO",
                 f"CLI_SOURCE=agency-{client_id}.csv"
             ],
             "networks": [

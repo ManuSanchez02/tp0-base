@@ -15,12 +15,19 @@ import (
 
 const CONFIRMATION = "OK"
 
+const (
+	BET = uint8(iota)
+	END
+	WINNERS
+)
+
 // ClientConfig Configuration used by the client
 type ClientConfig struct {
-	ID            string
-	ServerAddress string
-	LoopLapse     time.Duration
-	LoopPeriod    time.Duration
+	ID                string
+	ServerAddress     string
+	LoopLapse         time.Duration
+	LoopPeriod        time.Duration
+	WinnersLoopPeriod time.Duration
 }
 
 // Client Entity that encapsulates how
@@ -44,8 +51,11 @@ func (c *Client) sigterm_handler(sigterms chan os.Signal) {
 		c.clientConfig.ID,
 	)
 	c.conn.Close()
-	c.reader.Close()
 	log.Infof("action: close_socket | result: success | client_id: %v",
+		c.clientConfig.ID,
+	)
+	c.reader.Close()
+	log.Infof("action: close_reader | result: success | client_id: %v",
 		c.clientConfig.ID,
 	)
 }
@@ -55,7 +65,7 @@ func (c *Client) sigterm_handler(sigterms chan os.Signal) {
 func NewClient(clientConfig ClientConfig, readerConfig ReaderConfig) *Client {
 	client := &Client{
 		clientConfig: clientConfig,
-		done:         make(chan bool),
+		done:         make(chan bool, 1),
 		readerConfig: readerConfig,
 	}
 
@@ -80,16 +90,12 @@ func (c *Client) createClientSocket() error {
 	}
 
 	c.conn = conn
-	written_bytes, err := fmt.Fprintf(c.conn, "%v\n", c.clientConfig.ID)
-	if err != nil {
+	client_id := fmt.Sprintf("%v\n", c.clientConfig.ID)
+	client_id_bytes := []byte(client_id)
+	if err := c.send(client_id_bytes); err != nil {
 		log.Fatalf("action: send_id | result: fail | client_id: %v | error: %v",
 			c.clientConfig.ID,
 			err,
-		)
-	} else if written_bytes != len(c.clientConfig.ID)+1 {
-		log.Fatalf("action: send_id | result: fail | client_id: %v | error: %v",
-			c.clientConfig.ID,
-			errors.New("short-write"),
 		)
 	}
 
@@ -109,7 +115,7 @@ func (c *Client) createReader() {
 }
 
 // StartClientLoop Send batches to the client until the reader is empty
-func (c *Client) StartClientLoop() {
+func (c *Client) StartClientLoop() error {
 	c.createClientSocket()
 	c.createReader()
 	defer c.conn.Close()
@@ -122,7 +128,7 @@ loop:
 				c.clientConfig.ID,
 				read_err,
 			)
-			return
+			return read_err
 		}
 
 		select {
@@ -131,101 +137,126 @@ loop:
 			break loop
 		}
 
-		if c.SendBatch(bet_batch) != nil {
+		if err := c.SendBatch(bet_batch); err != nil {
 			log.Errorf("action: send_batch | result: fail | client_id: %v | bets: %v",
 				c.clientConfig.ID,
 				len(bet_batch),
 			)
-			return
+			return err
 		}
-		log.Infof("action: send_batch | result: success | client_id: %v | bets: %v", c.clientConfig.ID, len(bet_batch))
+		log.Debugf("action: send_batch | result: success | client_id: %v | bets: %v", c.clientConfig.ID, len(bet_batch))
 
-		if c.receiveConfirmation() != nil {
+		if err := c.receiveConfirmation(); err != nil {
 			log.Errorf("action: receive_confirmation | result: fail | client_id: %v | error: %v",
 				c.clientConfig.ID,
-				read_err,
+				err,
 			)
-			return
+			return err
 		}
 
-		log.Infof("action: receive_confirmation | result: success | client_id: %v",
+		log.Debugf("action: receive_confirmation | result: success | client_id: %v",
 			c.clientConfig.ID,
 		)
+	}
+	if err := c.sendNotification(); err != nil {
+		log.Errorf("action: send_notification | result: fail | client_id: %v | error: %v",
+			c.clientConfig.ID,
+			err,
+		)
+		return err
 	}
 
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.clientConfig.ID)
+	return nil
 }
 
-func (c *Client) ProcessBet(bet Bet) {
-	c.createClientSocket()
-	defer c.conn.Close()
-
-	msg, send_err := c.sendBet(bet)
-	if send_err != nil {
-		log.Errorf("action: send_bet | result: fail | client_id: %v | error: %v",
-			c.clientConfig.ID,
-			send_err,
-		)
-		return
+func (c *Client) sendNotification() error {
+	if err := c.send([]byte{END}); err != nil {
+		return err
 	}
 
-	log.Infof("action: send_bet | result: success | client_id: %v | msg: %v",
-		c.clientConfig.ID,
-		msg,
-	)
-
-	if receive_err := c.receiveConfirmation(); receive_err != nil {
-		log.Errorf("action: receive_confirmation | result: fail | client_id: %v | error: %v",
-			c.clientConfig.ID,
-			receive_err,
-		)
-		return
-	}
-
-	log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
-		bet.Document,
-		bet.Number,
-	)
+	return nil
 }
 
-func (c *Client) sendBet(bet Bet) (string, error) {
-	msg := bet.Serialize()
-	if len(msg) > 255 {
-		return "", errors.New("message too long")
-	}
-	length := uint8(len(msg))
-	length_bytes := make([]byte, binary.Size(length))
-	length_bytes[0] = length
-	total_bytes_written := 0
-	for bytes_written, err := c.conn.Write(length_bytes); total_bytes_written < len(length_bytes); bytes_written, err = c.conn.Write(length_bytes) {
+func (c *Client) GetWinnersLoop() (int, error) {
+	for {
+		c.createClientSocket()
+		defer c.conn.Close()
+		log.Debugf("action: get_winners | result: in_progress | client_id: %v",
+			c.clientConfig.ID,
+		)
+		winners, err := c.GetWinners()
 		if err != nil {
-			return "", err
+			if err.Error() != "EOF" {
+				log.Errorf("action: get_winners | result: fail | client_id: %v | error: %v",
+					c.clientConfig.ID,
+					err,
+				)
+				return -1, err
+			} else {
+				select {
+				case <-c.done:
+					return -1, errors.New("graceful shutdown")
+				case <-time.After(c.clientConfig.WinnersLoopPeriod):
+					continue
+				}
+			}
 		}
-		total_bytes_written += bytes_written
-	}
 
-	total_bytes_written = 0
-	for bytes_written, err := fmt.Fprintf(c.conn, "%v", msg); total_bytes_written < len(msg); bytes_written, err = fmt.Fprintf(c.conn, "%v", msg) {
+		return winners, nil
+	}
+}
+
+func (c *Client) GetWinners() (int, error) {
+	winner_count := 0
+	for {
+		if err := c.send([]byte{WINNERS}); err != nil {
+			return -1, err
+		}
+
+		message_type_bytes, err := c.receive_exactly(1)
 		if err != nil {
-			return "", err
+			return -1, err
 		}
-		total_bytes_written += bytes_written
-	}
+		message_type := uint8(message_type_bytes[0])
+		if message_type == END {
+			return winner_count, nil
+		} else if message_type != BET {
+			return -1, errors.New("unexpected message type")
+		}
 
-	return msg, nil
+		length_bytes, err := c.receive_exactly(1)
+		if err != nil {
+			return -1, err
+		}
+		length := uint8(length_bytes[0])
+		bet_data, err := c.receive_exactly(int(length))
+		if err != nil {
+			return -1, err
+		}
+
+		bet_data_str := string(bet_data)
+		bet, err := DeserializeBet(bet_data_str)
+		if err != nil {
+			return -1, err
+		}
+
+		log.Infof("action: winner | result: success | client_id: %v | bet: %v",
+			c.clientConfig.ID,
+			bet,
+		)
+		winner_count++
+	}
 }
 
 func (c *Client) receiveConfirmation() error {
-	response := make([]byte, len(CONFIRMATION))
-	total_bytes_read := 0
-	for bytes_read, err := c.conn.Read(response); total_bytes_read < len(CONFIRMATION); bytes_read, err = c.conn.Read(response) {
-		if err != nil {
-			return err
-		} else if string(response) != CONFIRMATION {
-			return errors.New("unexpected response")
-		}
+	data, err := c.receive_exactly(len(CONFIRMATION))
+	if err != nil {
+		return err
+	}
 
-		total_bytes_read += bytes_read
+	if string(data) != CONFIRMATION {
+		return errors.New("confirmation failed, unexpected response")
 	}
 
 	return nil
@@ -258,16 +289,58 @@ func (c *Client) SendBatch(bets []Bet) error {
 
 	batch_length := uint32(len(serialized_data))
 	batch_length_bytes := make([]byte, binary.Size(batch_length))
+	message_type_bytes := make([]byte, binary.Size(uint8(BET)))
+	message_type_bytes[0] = uint8(BET)
 	binary.BigEndian.PutUint32(batch_length_bytes, batch_length)
-	serialized_data = append(batch_length_bytes, serialized_data...)
+	metadata := append(message_type_bytes, batch_length_bytes...)
+	serialized_data = append(metadata, serialized_data...)
 
+	if err := c.send(serialized_data); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) send(data []byte) error {
 	total_bytes_written := 0
-	for written_bytes, err := c.conn.Write(serialized_data); total_bytes_written < len(serialized_data); written_bytes, err = c.conn.Write(serialized_data) {
+	written_bytes, err := c.conn.Write(data)
+	if err != nil {
+		return err
+	}
+	total_bytes_written += written_bytes
+
+	for total_bytes_written < len(data) {
 		if err != nil {
 			return err
 		}
+		written_bytes, err = c.conn.Write(data[total_bytes_written:])
 		total_bytes_written += written_bytes
 	}
 
 	return nil
+}
+
+func (c *Client) receive_exactly(length int) ([]byte, error) {
+	data := make([]byte, length)
+	buffer := make([]byte, length)
+	total_bytes_read := 0
+	bytes_read, err := c.conn.Read(data)
+	if err != nil {
+		return nil, err
+	}
+	total_bytes_read += bytes_read
+
+	for total_bytes_read < length {
+		bytes_read, err = c.conn.Read(buffer)
+		if err != nil {
+			return nil, err
+		} else if bytes_read == 0 {
+			return data, errors.New("EOF")
+		}
+
+		total_bytes_read += bytes_read
+		data = append(data, buffer[:bytes_read]...)
+	}
+	return data, nil
 }
