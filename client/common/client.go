@@ -178,7 +178,7 @@ func (c *Client) sendNotification() error {
 	return nil
 }
 
-func (c *Client) GetWinnersLoop() (int, error) {
+func (c *Client) StartWinnersLoop() (int, error) {
 	for {
 		c.createClientSocket()
 		defer c.conn.Close()
