@@ -26,27 +26,40 @@ func (b Bet) Serialize() string {
 	return msg
 }
 
+func (b Bet) String() string {
+	return fmt.Sprintf("(document: %d | number: %d)", b.Document, b.Number)
+}
+
+func DeserializeBet(data string) (Bet, error) {
+	info := strings.Split(data, PROTOCOL_DELIMITER)
+	return betFromStringArray(info)
+}
+
 func BetFromCSV(data string) (Bet, error) {
 	info := strings.Split(data, CSV_DELIMITER)
-	if len(info) != 5 {
+	return betFromStringArray(info)
+}
+
+func betFromStringArray(data []string) (Bet, error) {
+	if len(data) != 5 {
 		errorString := fmt.Sprintf("invalid data: %s", data)
 		return Bet{}, errors.New(errorString)
 	}
-	document, err := strconv.Atoi(info[2])
+	document, err := strconv.Atoi(data[2])
 	if err != nil {
 		return Bet{}, err
 	}
 
-	number, err := strconv.Atoi(info[4])
+	number, err := strconv.Atoi(data[4])
 	if err != nil {
 		return Bet{}, err
 	}
 
 	return Bet{
-		FirstName: info[0],
-		LastName:  info[1],
+		FirstName: data[0],
+		LastName:  data[1],
 		Document:  document,
-		BirthDate: info[3],
+		BirthDate: data[3],
 		Number:    number,
 	}, nil
 }

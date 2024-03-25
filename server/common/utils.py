@@ -29,9 +29,12 @@ class Bet:
     def from_str(s: str) -> 'Bet':
         args = s.split(DELIMITER)
         if len(args) != 6:
-            raise ValueError(f'Invalid Bet string format. Expected 6 fields separated by "{DELIMITER}".')
+            raise ValueError(f'Invalid Bet string format. Expected 6 fields separated by "{DELIMITER}"., got {s}.')
         
         return Bet(*args)
+    
+    def serialize(self) -> str:
+        return ';'.join([self.first_name, self.last_name, self.document, str(self.birthdate), str(self.number)])
     
     def __repr__(self) -> str:
         return f'(dni: {self.document} | numero: {self.number})'

@@ -110,3 +110,29 @@ La longitud del batch indica la longitud (en bytes) del batch. Esta expresada en
 El tamaño del batch es de 32 apuestas por defecto, aunque puede ser modificado desde el archivo de config.yaml. El valor por defecto lo calcule usando el tamaño maximo teorico de una apuesta, que debido al protocolo implementado es de 256 bytes (255 bytes para datos y 1 byte para la longitud). Debido a que el requisito es que no se superen los 8kB por batch, entonces simplemente divido los 8kB por la longitud maxima de una apuesta (256 bytes), lo que da por resultado 32 apuestas por batch.
 
 Para ejecutar este ejercicio, solo hace falta correr `make docker-compose-up` y ver los logs con `make docker-compose-log`. Es recomendable redirigir el output a un archivo de texto para poder leer los logs con mayor facilidad ya que suelen ser muy extensos. Para ello, se puede ejecutar el comando `make docker-compose-log > logs.txt`
+
+### Ejercicio 7
+
+Nuevamente, en este ejercicio decidi realizar unas pequeñas modificaciones al protocolo. En primer lugar, agregue un campo mas al paquete. La estructura nueva es la siguiente:
+
+| Tipo de mensaje | Datos del mensaje (opcional) |
+|-----------------|------------------------------|
+
+El tipo de mensaje es un entero sin signo de 8 bits y puede valer:
++ `0`: Indica que el mensaje es de tipo `BET`. Este mensaje es usado para transmitir apuestas en batches.
++ `1`: Indica que el mensaje es de tipo `END`. Este mensaje es usado para notificar que no se tiene mas informacion para transmitir.
++ `2`: Indica que el mensaje es de tipo `WINNERS`. Este mensaje es enviado por el cliente al servidor para pedir los ganadores del sorteo. Si el sorteo no puede realizarse aun, el servidor corta la conexion con el cliente. Es responsabilidad de este ultimo esperar un periodo (configurable en `config.yaml` mediante `winner.period`) para reenviar dicho mensaje.
++ `3`: Indica que el mensaje es de tipo `WINNER`. Este mensaje es enviado por el servidor al cliente para informarle de un ganador del sorteo. Tiene el mismo formato que una apuesta individual, es decir, sin batches.
+
+La comunicacion se veria algo asi:
+![Diagrama de envio de apuestas](./images/ejercicio_7_envio_de_apuestas.png)
+
+Una vez el cliente envia todas las apuestas, procede a la fase de consulta de ganador. El servidor solo puede responder a un mensaje `WINNERS` una vez que las 5 agencias hayan enviado sus apuestas.
+
+![Diagrama de consulta de ganador](./images/ejercicio_7_consulta_de_ganadores.png)
+
+Para ejecutar este ejercicio, se deben seguir los siguientes pasos:
+1. Lo primero es generar un docker-compose con 5 agencias. Para ello, modifique el script del ejercicio 1, de forma que solo hace falta correr `python3 ./ejercicio_1/main.py 5`. El resultado de esto deberia ser un archivo llamado `docker-compose-ej-1.yaml`.
+2. Una vez creado el `docker-compose-ej-1.yaml`, se puede levantar usando `make docker-compose-up-ej-1`.
+3. Cuando los contenedores se esten ejecutando, se puede volcar los logs a un archivo de salida con `make docker-compose-logs-ej-1 > output.txt`.
+4. Buscar los mensajes del tipo `action: consulta_ganadores | result: success | cant_ganadores: <CANTIDAD>` en los logs para verificar el correcto funcionamiento del programa.

@@ -2,14 +2,15 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
-	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/common"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/common"
 )
 
 // InitConfig Function that uses viper library to parse configuration parameters.
@@ -34,6 +35,7 @@ func InitConfig() (*viper.Viper, error) {
 	v.BindEnv("loop", "period")
 	v.BindEnv("log", "level")
 	v.BindEnv("source")
+	v.BindEnv("winners", "period")
 
 	// Try to read configuration from config file. If config file
 	// does not exists then ReadInConfig will fail but configuration
@@ -47,6 +49,10 @@ func InitConfig() (*viper.Viper, error) {
 	// Parse time.Duration variables and return an error if those variables cannot be parsed
 	if _, err := time.ParseDuration(v.GetString("loop.period")); err != nil {
 		return nil, errors.Wrapf(err, "Could not parse CLI_LOOP_PERIOD env var as time.Duration.")
+	}
+
+	if _, err := time.ParseDuration(v.GetString("winners.period")); err != nil {
+		return nil, errors.Wrapf(err, "Could not parse CLI_WINNERS_PERIOD env var as time.Duration.")
 	}
 
 	return v, nil
@@ -96,10 +102,11 @@ func main() {
 	PrintConfig(v)
 
 	clientConfig := common.ClientConfig{
-		ServerAddress: v.GetString("server.address"),
-		ID:            v.GetString("id"),
-		LoopLapse:     v.GetDuration("loop.lapse"),
-		LoopPeriod:    v.GetDuration("loop.period"),
+		ServerAddress:     v.GetString("server.address"),
+		ID:                v.GetString("id"),
+		LoopLapse:         v.GetDuration("loop.lapse"),
+		LoopPeriod:        v.GetDuration("loop.period"),
+		WinnersLoopPeriod: v.GetDuration("winners.period"),
 	}
 
 	readerConfig := common.ReaderConfig{
@@ -108,5 +115,14 @@ func main() {
 	}
 
 	client := common.NewClient(clientConfig, readerConfig)
-	client.StartClientLoop()
+
+	if err := client.StartClientLoop(); err != nil {
+		log.Fatalf("action: client_loop | result: fail | client_id: %v | error: %v", clientConfig.ID, err)
+	}
+
+	if winners, err := client.StartWinnersLoop(); err != nil {
+		log.Fatalf("action: consulta_ganadores | result: fail | client_id: %v | err: %v", clientConfig.ID, err)
+	} else {
+		log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %v", winners)
+	}
 }

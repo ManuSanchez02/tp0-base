@@ -7,7 +7,7 @@ services:
     entrypoint: python3 /main.py
     environment:
     - PYTHONUNBUFFERED=1
-    - LOGGING_LEVEL=DEBUG
+    - LOGGING_LEVEL=INFO
     networks:
     - testing_net
     volumes:
@@ -18,16 +18,13 @@ services:
     entrypoint: /client
     environment:
     - CLI_ID=1
-    - CLI_LOG_LEVEL=DEBUG
-    - CLI_NOMBRE=nombre-1
-    - CLI_APELLIDO=apellido-1
-    - CLI_DOCUMENTO=40000001
-    - CLI_NACIMIENTO=2000-01-02
-    - CLI_NUMERO=10001
+    - CLI_LOG_LEVEL=INFO
+    - CLI_SOURCE=agency-1.csv
     networks:
     - testing_net
     volumes:
     - ./client/config.yaml:/config.yaml
+    - ./.data:/.data
     depends_on:
     - server
   client2:
@@ -36,16 +33,13 @@ services:
     entrypoint: /client
     environment:
     - CLI_ID=2
-    - CLI_LOG_LEVEL=DEBUG
-    - CLI_NOMBRE=nombre-2
-    - CLI_APELLIDO=apellido-2
-    - CLI_DOCUMENTO=40000002
-    - CLI_NACIMIENTO=2000-01-03
-    - CLI_NUMERO=10002
+    - CLI_LOG_LEVEL=INFO
+    - CLI_SOURCE=agency-2.csv
     networks:
     - testing_net
     volumes:
     - ./client/config.yaml:/config.yaml
+    - ./.data:/.data
     depends_on:
     - server
   client3:
@@ -54,16 +48,43 @@ services:
     entrypoint: /client
     environment:
     - CLI_ID=3
-    - CLI_LOG_LEVEL=DEBUG
-    - CLI_NOMBRE=nombre-3
-    - CLI_APELLIDO=apellido-3
-    - CLI_DOCUMENTO=40000003
-    - CLI_NACIMIENTO=2000-01-04
-    - CLI_NUMERO=10003
+    - CLI_LOG_LEVEL=INFO
+    - CLI_SOURCE=agency-3.csv
     networks:
     - testing_net
     volumes:
     - ./client/config.yaml:/config.yaml
+    - ./.data:/.data
+    depends_on:
+    - server
+  client4:
+    container_name: client4
+    image: client:latest
+    entrypoint: /client
+    environment:
+    - CLI_ID=4
+    - CLI_LOG_LEVEL=INFO
+    - CLI_SOURCE=agency-4.csv
+    networks:
+    - testing_net
+    volumes:
+    - ./client/config.yaml:/config.yaml
+    - ./.data:/.data
+    depends_on:
+    - server
+  client5:
+    container_name: client5
+    image: client:latest
+    entrypoint: /client
+    environment:
+    - CLI_ID=5
+    - CLI_LOG_LEVEL=INFO
+    - CLI_SOURCE=agency-5.csv
+    networks:
+    - testing_net
+    volumes:
+    - ./client/config.yaml:/config.yaml
+    - ./.data:/.data
     depends_on:
     - server
 networks:

@@ -15,12 +15,20 @@ import (
 
 const CONFIRMATION = "OK"
 
+const (
+	BET = uint8(iota)
+	END
+	WINNERS
+	WINNER
+)
+
 // ClientConfig Configuration used by the client
 type ClientConfig struct {
-	ID            string
-	ServerAddress string
-	LoopLapse     time.Duration
-	LoopPeriod    time.Duration
+	ID                string
+	ServerAddress     string
+	LoopLapse         time.Duration
+	LoopPeriod        time.Duration
+	WinnersLoopPeriod time.Duration
 }
 
 // Client Entity that encapsulates how
@@ -44,8 +52,11 @@ func (c *Client) sigtermHandler(sigterms chan os.Signal) {
 		c.clientConfig.ID,
 	)
 	c.conn.Close()
-	c.reader.Close()
 	log.Infof("action: close_socket | result: success | client_id: %v",
+		c.clientConfig.ID,
+	)
+	c.reader.Close()
+	log.Infof("action: close_reader | result: success | client_id: %v",
 		c.clientConfig.ID,
 	)
 }
@@ -55,7 +66,7 @@ func (c *Client) sigtermHandler(sigterms chan os.Signal) {
 func NewClient(clientConfig ClientConfig, readerConfig ReaderConfig) *Client {
 	client := &Client{
 		clientConfig: clientConfig,
-		done:         make(chan bool),
+		done:         make(chan bool, 1),
 		readerConfig: readerConfig,
 	}
 
@@ -105,7 +116,7 @@ func (c *Client) createReader() {
 }
 
 // StartClientLoop Send batches to the client until the reader is empty
-func (c *Client) StartClientLoop() {
+func (c *Client) StartClientLoop() error {
 	c.createClientSocket()
 	c.createReader()
 	defer c.conn.Close()
@@ -118,7 +129,7 @@ loop:
 				c.clientConfig.ID,
 				read_err,
 			)
-			return
+			return read_err
 		}
 
 		select {
@@ -127,29 +138,116 @@ loop:
 			break loop
 		}
 
-		if c.SendBatch(bet_batch) != nil {
+		if err := c.SendBatch(bet_batch); err != nil {
 			log.Errorf("action: send_batch | result: fail | client_id: %v | bets: %v",
 				c.clientConfig.ID,
 				len(bet_batch),
 			)
-			return
+			return err
 		}
-		log.Infof("action: send_batch | result: success | client_id: %v | bets: %v", c.clientConfig.ID, len(bet_batch))
+		log.Debugf("action: send_batch | result: success | client_id: %v | bets: %v", c.clientConfig.ID, len(bet_batch))
 
-		if c.receiveConfirmation() != nil {
+		if err := c.receiveConfirmation(); err != nil {
 			log.Errorf("action: receive_confirmation | result: fail | client_id: %v | error: %v",
 				c.clientConfig.ID,
-				read_err,
+				err,
 			)
-			return
+			return err
 		}
 
-		log.Infof("action: receive_confirmation | result: success | client_id: %v",
+		log.Debugf("action: receive_confirmation | result: success | client_id: %v",
 			c.clientConfig.ID,
 		)
 	}
+	if err := c.sendNotification(); err != nil {
+		log.Errorf("action: send_notification | result: fail | client_id: %v | error: %v",
+			c.clientConfig.ID,
+			err,
+		)
+		return err
+	}
 
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.clientConfig.ID)
+	return nil
+}
+
+func (c *Client) sendNotification() error {
+	if err := c.send([]byte{END}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) StartWinnersLoop() (int, error) {
+	for {
+		c.createClientSocket()
+		defer c.conn.Close()
+		log.Debugf("action: get_winners | result: in_progress | client_id: %v",
+			c.clientConfig.ID,
+		)
+		winners, err := c.GetWinners()
+		if err != nil {
+			if err.Error() != "EOF" {
+				log.Errorf("action: get_winners | result: fail | client_id: %v | error: %v",
+					c.clientConfig.ID,
+					err,
+				)
+				return -1, err
+			} else {
+				select {
+				case <-c.done:
+					return -1, errors.New("graceful shutdown")
+				case <-time.After(c.clientConfig.WinnersLoopPeriod):
+					continue
+				}
+			}
+		}
+
+		return winners, nil
+	}
+}
+
+func (c *Client) GetWinners() (int, error) {
+	winner_count := 0
+	for {
+		if err := c.send([]byte{WINNERS}); err != nil {
+			return -1, err
+		}
+
+		message_type_bytes, err := c.receiveExactly(1)
+		if err != nil {
+			return -1, err
+		}
+		message_type := uint8(message_type_bytes[0])
+		if message_type == END {
+			return winner_count, nil
+		} else if message_type != WINNER {
+			return -1, errors.New("unexpected message type")
+		}
+
+		length_bytes, err := c.receiveExactly(1)
+		if err != nil {
+			return -1, err
+		}
+		length := uint8(length_bytes[0])
+		bet_data, err := c.receiveExactly(int(length))
+		if err != nil {
+			return -1, err
+		}
+
+		bet_data_str := string(bet_data)
+		bet, err := DeserializeBet(bet_data_str)
+		if err != nil {
+			return -1, err
+		}
+
+		log.Infof("action: winner | result: success | client_id: %v | bet: %v",
+			c.clientConfig.ID,
+			bet,
+		)
+		winner_count++
+	}
 }
 
 // Receives a batch confirmation from the server indicating that the batch was
@@ -175,8 +273,11 @@ func (c *Client) SendBatch(bets []Bet) error {
 
 	batch_length := uint32(len(serialized_data))
 	batch_length_bytes := make([]byte, binary.Size(batch_length))
+	message_type_bytes := make([]byte, binary.Size(uint8(BET)))
+	message_type_bytes[0] = uint8(BET)
 	binary.BigEndian.PutUint32(batch_length_bytes, batch_length)
-	serialized_data = append(batch_length_bytes, serialized_data...)
+	metadata := append(message_type_bytes, batch_length_bytes...)
+	serialized_data = append(metadata, serialized_data...)
 
 	if err := c.send(serialized_data); err != nil {
 		return err
@@ -200,8 +301,8 @@ func (c *Client) send(data []byte) error {
 		written_bytes, err = c.conn.Write(data[total_bytes_written:])
 		total_bytes_written += written_bytes
 	}
-	return nil
 
+	return nil
 }
 
 func (c *Client) receiveExactly(length int) ([]byte, error) {

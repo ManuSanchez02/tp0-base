@@ -7,3 +7,5 @@ log:
   level: "info"
 batch:
   size: 32
+winners:
+  period: "1s"
