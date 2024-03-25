@@ -46,17 +46,14 @@ def create_config(clients):
             "environment": [
                 f"CLI_ID={client_id}",
                 "CLI_LOG_LEVEL=DEBUG",
-                f"CLI_NOMBRE=nombre-{client_id}",
-                f"CLI_APELLIDO=apellido-{client_id}",
-                f"CLI_DOCUMENTO={40000000+client_id}",
-                f"CLI_NACIMIENTO=2000-01-0{client_id % 9 + 1}",
-                f"CLI_NUMERO={10000+client_id}",
+                f"CLI_SOURCE=agency-{client_id}.csv"
             ],
             "networks": [
                 "testing_net"
             ],
             "volumes": [
-                "./client/config.yaml:/config.yaml"
+                "./client/config.yaml:/config.yaml",
+                "./.data:/.data"
             ],
             "depends_on": [
                 "server"

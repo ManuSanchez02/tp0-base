@@ -35,22 +35,28 @@ class Server:
                 return
             
             self.__handle_client_connection(client_sock)
-
-    def __read_msg(self, client_sock: socket.socket) -> str:
-        packet_len = int.from_bytes(client_sock.recv(1), 'big', signed=False)
-        read_len = 0
-        msg = ''
-        logging.info(f'action: receive_message | result: in_progress | packet_len: {packet_len}')
-
-        while read_len < packet_len:
-            msg += client_sock.recv(packet_len - read_len).decode('ascii')
-            read_len = len(msg)
-            logging.info(f"action: receive_message | result: in_progress | read_len: {read_len} | packet_len: {packet_len} | msg: {msg}")
+        
+        
+    def __read_msg(self, client_sock: socket.socket) -> bytes:
+        batch_len_bytes = client_sock.recv(4)
+        if not batch_len_bytes:
+            return b''
+        
+        if len(batch_len_bytes) != 4:
+            raise OSError("Error while reading batch length")
         
         addr = client_sock.getpeername()
-        logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
+        batch_len = int.from_bytes(batch_len_bytes, 'big', signed=False)
+        logging.info(f'action: receive_batch | result: in_progress | ip: {addr[0]} | batch_len: {batch_len}')
 
-        return msg
+        batch = client_sock.recv(batch_len)
+        while len(batch) < batch_len:
+            batch += client_sock.recv(batch_len - len(batch))
+            logging.info(f"action: receive_batch | result: in_progress | read_len: {len(batch)}")
+          
+        logging.info(f'action: receive_batch | result: success | ip: {addr[0]}')
+
+        return batch
     
     def __send_confirmation(self, client_sock: socket.socket):
         sent_data = client_sock.send(CONFIRMATION)
@@ -60,25 +66,41 @@ class Server:
         addr = client_sock.getpeername()
         logging.info(f'action: send_confirmation | result: success | ip: {addr[0]}')
 
+    def __get_client_id(self, client_sock: socket.socket) -> str:
+        id = ""
+        while read := client_sock.recv(1):
+            if read == b'\n':
+                return id
+            id += read.decode('utf-8')
+
     def __handle_client_connection(self, client_sock: socket.socket):
         """
-        Read message from a specific client socket and closes the socket
+        Read batches from client socket and process them. If an empty
+        message is received, the client socket will be closed.
 
         If a problem arises in the communication with the client, the
         client socket will also be closed
         """
         try:
-            # TODO: Modify the receive to avoid short-reads
-            msg = self.__read_msg(client_sock)
-            bet = Bet.from_str(msg)
-            store_bets([bet])
-            logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
-            self.__send_confirmation(client_sock)
+            client_id = self.__get_client_id(client_sock)
+            best_processed = 0
 
+            while True:
+                msg_bytes = self.__read_msg(client_sock)
+                if not msg_bytes:
+                    logging.info("action: client_disconnected | result: success")
+                    break
+
+                bets = process_batch(msg_bytes, client_id)
+                store_bets(bets)
+                best_processed += len(bets)
+                logging.info(f'action: apuestas_almacenadas | result: success | apuestas: {bets}')
+                self.__send_confirmation(client_sock)
+            logging.info(f"action: client_disconnected | result: success | bets_processed: {best_processed}")
         except OSError as e:
             logging.error(f"action: receive_message | result: fail | error: {e}")
         except ValueError as e:
-            logging.error(f"action: apuesta_almacenada | result: fail | error: {e}")
+            logging.error(f"action: apuestas_almacenadas | result: fail | error: {e}")
         finally:
             client_sock.close()
             self._client_sockets.discard(client_sock)
@@ -109,4 +131,13 @@ class Server:
         logging.info("action: close_client_sockets | result: success")
         
 
-
+def process_batch(batch: bytes, agency_id: str):
+    bets = []
+    i = 0
+    while i < len(batch): 
+        packet_len = batch[i]
+        bet_info = f"{agency_id};{batch[i+1:i+packet_len+1].decode('utf-8')}"
+        current_bet = Bet.from_str(bet_info)
+        bets.append(current_bet)
+        i += packet_len + 1
+    return bets

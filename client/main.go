@@ -2,15 +2,14 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/common"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-
-	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/common"
 )
 
 // InitConfig Function that uses viper library to parse configuration parameters.
@@ -33,13 +32,8 @@ func InitConfig() (*viper.Viper, error) {
 	v.BindEnv("id")
 	v.BindEnv("server", "address")
 	v.BindEnv("loop", "period")
-	v.BindEnv("loop", "lapse")
 	v.BindEnv("log", "level")
-	v.BindEnv("nombre")
-	v.BindEnv("apellido")
-	v.BindEnv("documento")
-	v.BindEnv("nacimiento")
-	v.BindEnv("numero")
+	v.BindEnv("source")
 
 	// Try to read configuration from config file. If config file
 	// does not exists then ReadInConfig will fail but configuration
@@ -51,10 +45,6 @@ func InitConfig() (*viper.Viper, error) {
 	}
 
 	// Parse time.Duration variables and return an error if those variables cannot be parsed
-	if _, err := time.ParseDuration(v.GetString("loop.lapse")); err != nil {
-		return nil, errors.Wrapf(err, "Could not parse CLI_LOOP_LAPSE env var as time.Duration.")
-	}
-
 	if _, err := time.ParseDuration(v.GetString("loop.period")); err != nil {
 		return nil, errors.Wrapf(err, "Could not parse CLI_LOOP_PERIOD env var as time.Duration.")
 	}
@@ -112,15 +102,11 @@ func main() {
 		LoopPeriod:    v.GetDuration("loop.period"),
 	}
 
-	bet := common.Bet{
-		AgencyID:  clientConfig.ID,
-		Document:  v.GetInt("documento"),
-		BirthDate: v.GetString("nacimiento"),
-		Number:    v.GetInt("numero"),
-		FirstName: v.GetString("nombre"),
-		LastName:  v.GetString("apellido"),
+	readerConfig := common.ReaderConfig{
+		Path:      fmt.Sprintf("/.data/%v", v.GetString("source")),
+		BatchSize: v.GetInt("batch.size"),
 	}
 
-	client := common.NewClient(clientConfig)
-	client.ProcessBet(bet)
+	client := common.NewClient(clientConfig, readerConfig)
+	client.StartClientLoop()
 }
