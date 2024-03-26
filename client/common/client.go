@@ -165,8 +165,10 @@ loop:
 		)
 		return err
 	}
+	log.Infof("action: send_notification | result: success | client_id: %v",
+		c.clientConfig.ID,
+	)
 
-	log.Infof("action: loop_finished | result: success | client_id: %v", c.clientConfig.ID)
 	return nil
 }
 
@@ -182,7 +184,7 @@ func (c *Client) StartWinnersLoop() (int, error) {
 	for {
 		c.createClientSocket()
 		defer c.conn.Close()
-		log.Debugf("action: get_winners | result: in_progress | client_id: %v",
+		log.Infof("action: get_winners | result: in_progress | client_id: %v",
 			c.clientConfig.ID,
 		)
 		winners, err := c.GetWinners()

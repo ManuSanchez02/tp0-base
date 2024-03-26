@@ -118,10 +118,12 @@ func main() {
 
 	if err := client.StartClientLoop(); err != nil {
 		log.Fatalf("action: client_loop | result: fail | client_id: %v | error: %v", clientConfig.ID, err)
+	} else {
+		log.Infof("action: loop_finished | result: success | client_id: %v", clientConfig.ID)
 	}
 
 	if winners, err := client.StartWinnersLoop(); err != nil {
-		log.Fatalf("action: consulta_ganadores | result: success | client_id: %v | err: %v", clientConfig.ID, err)
+		log.Fatalf("action: consulta_ganadores | result: fail | client_id: %v | err: %v", clientConfig.ID, err)
 	} else {
 		log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %v", winners)
 	}
