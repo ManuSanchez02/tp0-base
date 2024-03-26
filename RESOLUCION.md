@@ -136,3 +136,22 @@ Para ejecutar este ejercicio, se deben seguir los siguientes pasos:
 2. Una vez creado el `docker-compose-ej-1.yaml`, se puede levantar usando `make docker-compose-up-ej-1`.
 3. Cuando los contenedores se esten ejecutando, se puede volcar los logs a un archivo de salida con `make docker-compose-logs-ej-1 > output.txt`.
 4. Buscar los mensajes del tipo `action: consulta_ganadores | result: success | cant_ganadores: <CANTIDAD>` en los logs para verificar el correcto funcionamiento del programa.
+
+
+## Parte 3
+
+### Ejercicio 8
+
+En este ejercicio, hice uso de la libreria `multiprocessing` para procesar mensajes en paralelo. No fue posible hacerlo con `multithreading` ya que Python posee un lock global del interprete (GIL), el cual no permite que se ejecuten instrucciones de forma concurrente usando threads.
+
+Para poder lograr el procesamiento concurrente, por cada conexion entrante, creo un proceso nuevo el cual se encarga de recibir y enviar informacion al cliente. Sin embargo, esto resulta en que hay una seccion critica en las funciones encargadas de leer y escribir al archivo de apuestas. Como consecuencia, use un `Lock()` de `multiprocessing`, el cual permite que solo un proceso acceda a dicho recurso a la vez.
+
+Asimismo, implemente una `Queue()` de `multiprocessing` para comunicar, al proceso principal, que clientes terminaron de transferir las apuestas. Este proceso principal es aquel que acepta conexiones nuevas. Despues de aceptar una conexion, lee la `Queue()` y actualiza el conjunto de notificaciones recibidas.
+
+Finalmente, para el modifique el graceful shutdown para enviar un `SIGTERM` a todos los subprocesos. Al recibirlo, cada uno de estos realiza un graceful shutdown de forma independiente.
+
+Para ejecutar este ejercicio, se pueden seguir los mismos pasos que para el ejercicio 7:
+1. Lo primero es generar un docker-compose con 5 agencias. Para ello, modifique el script del ejercicio 1, de forma que solo hace falta correr `python3 ./ejercicio_1/main.py 5`. El resultado de esto deberia ser un archivo llamado `docker-compose-ej-1.yaml`.
+2. Una vez creado el `docker-compose-ej-1.yaml`, se puede levantar usando `make docker-compose-up-ej-1`.
+3. Cuando los contenedores se esten ejecutando, se puede volcar los logs a un archivo de salida con `make docker-compose-logs-ej-1 > output.txt`.
+4. Verificar que los mensajes de `action: apuestas_almacenadas | result: success | client_id: <CLIENT_ID> | apuestas: [...]` estan intercalados, con IDs de clientes distintos.

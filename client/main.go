@@ -118,6 +118,8 @@ func main() {
 
 	if err := client.StartClientLoop(); err != nil {
 		log.Fatalf("action: client_loop | result: fail | client_id: %v | error: %v", clientConfig.ID, err)
+	} else {
+		log.Infof("action: loop_finished | result: success | client_id: %v", clientConfig.ID)
 	}
 
 	if winners, err := client.StartWinnersLoop(); err != nil {

@@ -3,7 +3,7 @@ import signal
 import socket
 import logging
 from typing import Optional
-
+import multiprocessing
 from common.utils import Bet, has_won, load_bets, store_bets
 
 CONFIRMATION = b'OK'
@@ -22,8 +22,11 @@ class Server:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
-        self._client_sockets = set()
-        self.notifications = {}
+        self.client_socket = None
+        self.notifications = set()
+        self.file_lock = multiprocessing.Lock()
+        self.queue = multiprocessing.Queue(REQUIRED_AGENCIES)
+        self.process_handles = []
 
     def run(self):
         """
@@ -41,12 +44,23 @@ class Server:
         while True:
             try:
                 client_sock = self.__accept_new_connection()
+                self.__update_notifications()
             except OSError:
                 logging.info("action: graceful_shutdown | result: success")
-                return
-            
-            self.__handle_client_connection(client_sock)
+                break
+            process = multiprocessing.Process(target=self.__handle_client_connection, args=(client_sock,))
+            self.process_handles.append(process)
+            process.start()
+            client_sock.close()
+
+        logging.debug("action: join_processes | result: in_progress")
+        for process in self.process_handles:
+            process.join()
+        logging.debug("action: join_processes | result: success")
         
+    def __update_notifications(self):
+        while not self.queue.empty():
+            self.notifications.add(self.queue.get())
         
     def __read_msg(self, client_sock: socket.socket) -> tuple[Optional[bytes], MessageType]:
         message_type = receive_exact(client_sock, 1)
@@ -73,7 +87,9 @@ class Server:
     
     def __process_batch(self, batch_bytes: bytes, client_sock: socket.socket, client_id: str):
         bets = parse_bets(batch_bytes, client_id)
+        self.file_lock.acquire()
         store_bets(bets)
+        self.file_lock.release()
         logging.info(f'action: apuestas_almacenadas | result: success | client_id: {client_id} | apuestas: {bets}')
         self.__send_confirmation(client_sock)
     
@@ -89,6 +105,10 @@ class Server:
                 return id
             id += read.decode('utf-8')
 
+    def __receive_notification(self, client_id: str):
+        self.queue.put(client_id)
+        logging.debug(f"action: receive_notification | result: success | client_id: {client_id}")
+
     def __handle_client_connection(self, client_sock: socket.socket):
         """
         Read batches from client socket and process them. If an empty
@@ -97,20 +117,23 @@ class Server:
         If a problem arises in the communication with the client, the
         client socket will also be closed
         """
+        self.client_socket = client_sock
+        self._server_socket.close()
+        self._server_socket = None
+        self.process_handles = []
         try:
             client_id = self.__get_client_id(client_sock)
 
             while True:
                 msg, msg_type = self.__read_msg(client_sock)
                 if msg_type == MessageType.END:
-                    self.notifications[client_id] = True
+                    self.__receive_notification(client_id)
                     break
                 elif msg_type == MessageType.WINNERS:
                     if self.__all_notifications_received():
                         self.send_winners(client_sock, client_id)
                     break
                 elif msg_type == MessageType.BET:
-                    self.notifications[client_id] = False
                     self.__process_batch(msg, client_sock, client_id)
 
         except OSError as e:
@@ -121,12 +144,13 @@ class Server:
             logging.info(f"action: client_disconnected | result: success | client_id: {client_id}")
         finally:
             client_sock.close()
-            self._client_sockets.discard(client_sock)
 
     def __all_notifications_received(self):
-        return all(self.notifications.values()) and len(self.notifications) == REQUIRED_AGENCIES
+        logging.info(f"action: all_notifications_received | result: in_progress | notifications: {self.notifications}")
+        return len(self.notifications) == REQUIRED_AGENCIES
     
     def send_winners(self, client_sock: socket.socket, client_id: str):
+        self.file_lock.acquire()
         for bet in load_bets():
             if bet.agency == int(client_id) and has_won(bet):
                 msg = bet.serialize().encode('utf-8')
@@ -135,7 +159,7 @@ class Server:
                 msg = bet_message + length + msg
                 send(client_sock, msg)
                 logging.debug(f"action: send_winners | result: in_progress | client_id: {client_id} | bet: {bet}")
-
+        self.file_lock.release()
         end_message = MessageType.END.value.to_bytes(1, 'big')
         send(client_sock, end_message)
         logging.info(f"action: send_winners | result: success | client_id: {client_id}")
@@ -151,19 +175,25 @@ class Server:
         # Connection arrived
         logging.info('action: accept_connections | result: in_progress')
         c, addr = self._server_socket.accept()
-        self._client_sockets.add(c)
         logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
     
     def __graceful_shutdown(self, _signum, _frame):
         logging.info("action: graceful_shutdown | result: in_progress")
-        logging.info("action: close_server_socket | result: in_progress")
-        self._server_socket.close()
-        logging.info("action: close_server_socket | result: success")
-        logging.info("action: close_client_sockets | result: in_progress")
-        for client_sock in self._client_sockets:
-            client_sock.close()
-        logging.info("action: close_client_sockets | result: success")
+        
+        if self._server_socket:
+            self._server_socket.close()
+            logging.info("action: close_server_socket | result: success")
+        
+        if self.client_socket:
+            peer = self.client_socket.getpeername()
+            self.client_socket.close()
+            logging.info(f"action: close_client_socket | result: success | ip: {peer[0]}")
+
+        if self.process_handles:
+            for process in self.process_handles:
+                process.terminate()
+            logging.info("action: terminate_processes | result: success")
         
 def send(client_sock: socket.socket, message: bytes):
     sent_data = client_sock.send(message)
